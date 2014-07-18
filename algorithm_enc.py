@@ -44,9 +44,9 @@ def PRF_tokens(prf_key, tokens, prf_len):
 
 def combine_string_encrypted(tags, cipher_key, data):
 	IV, ciphertext = encrypt_RND(cipher_key, data)
-	dec_result = binascii.hexlify(ciphertext) + " " + binascii.hexlify(IV) + " "
+	dec_result = binascii.hexlify(ciphertext) + "." + binascii.hexlify(IV) + "."
 	for tag in tags:
-		dec_result += binascii.hexlify(tag) + " "
+		dec_result += binascii.hexlify(tag)[:5] + "."
 	return dec_result
 
 # split each element in email header

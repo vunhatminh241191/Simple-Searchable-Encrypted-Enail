@@ -2,7 +2,7 @@ from summary_files import *
 
 # get data to decrypt
 def dec_header_body(data_to_decrypt):
-	print data_to_decrypt
+	print repr(data_to_decrypt)
 	IV = binascii.unhexlify(data_to_decrypt.split(".")[1])
 	data = binascii.unhexlify(data_to_decrypt.split(".")[0])
 	return IV, data

@@ -33,7 +33,7 @@ class ServerProtocol(protocol.Protocol):
 
 	# Client => Proxy
 	def dataReceived(self, data):
-		#print "C->S: %s", repr(data)
+		print "C->S: %s", repr(data)
 
 		if self.client:
 			# Login, Append and Search commands
@@ -53,7 +53,7 @@ class ServerProtocol(protocol.Protocol):
 					self.flag = False
 					self.checking_append = False
 					append_cmd, transfer_email =  self.other.Append(self.prf_key, 
-						self.cipher_key, self.user)
+						self.cipher_key)
 					self.sending_append(append_cmd, transfer_email)
 					return
 				else:
@@ -68,10 +68,15 @@ class ServerProtocol(protocol.Protocol):
  
 	# Proxy => Client
 	def write(self, data):
-		#print "S->C: %s", repr(data)
+		print "S->C: %s", repr(data)
 
 		if "FETCH" and "OK Fetch completed" and "BODY[]" in data:
-			self.other.Fetch(data)
+			print repr(data)
+			print "hehehe"
+			data = self.other.Fetch(data, self.cipher_key)
+			print repr(data)
+		elif "FETCH" and "RFC822.SIZE" in data:
+
 
 		self.transport.write(data)
 
@@ -117,10 +122,10 @@ class Other_Function(object):
 		user = PRF(prf_key, curr_data[2], 10)
 		return user
 
-	def Append(self, prf_key, cipher_key, user):
+	def Append(self, prf_key, cipher_key):
 		append_cmd = self.buffer.split('\r\n')[0] + "\r\n"
 		email_ = email.message_from_string('\r\n'.join(self.buffer.split('\r\n')[1:]))
-		encryption = Encryption(email_, cipher_key, prf_key, user)
+		encryption = Encryption(email_, cipher_key, prf_key)
 		transfer_email = encryption.encrypted_email()
 		append_cmd = self.change_length_http(append_cmd, len(transfer_email))
 		self.buffer = ''
@@ -134,12 +139,18 @@ class Other_Function(object):
 		print data
 		return data
 
-	def Fetch(self, data):
-		list_data = data.split("===--)")
+	def Fetch(self, data, cipher_key):
+		list_data = data.split('==--\r\n)\r\n*')
+		data = ''
 		for member in list_data:
-			print "hohohoho"
-			print member
-		
+			header_str, tail_str, message = self.get_message(member)
+			curr_email = email.message_from_string(message)
+			email_ = Decryption(curr_email, cipher_key)
+			original = email_.decrypt_email()
+			header_str = self.change_length_http(header_str, len(original))
+			curr_data = header_str + original + tail_str 
+			data += curr_data
+		return data
 
 	def change_length_http(self, header_str, len_data):
 		number = header_str.split("{")[-1].replace("}\r\n", "")
@@ -148,16 +159,27 @@ class Other_Function(object):
 
 	def get_message(self, data):
 		header_str = data.split('\r\n')[0] + '\r\n'
-		tail_str = ')\r\n' + data.split(')\r\n')[-1]
-		message = data.split(header_str)[1].split(tail_str)[0]
+		if 'OK Fetch completed' in data:
+			tail_str = ')\r\n' + data.split(')\r\n')[-1]
+			message = data.split(header_str)[1].split(tail_str)[0]
+		else:
+			tail_str = ''
+			message = data.split(header_str)[1]
 		return header_str, tail_str, message
 
+	def preview(self, data):
+		curr_email = email.message_from_string(data)
+		message = MIMEMultipart()
+		for header in header_part:
+			message[header] = decrypt_RND_header_and_body_value(self.cipher_key,
+				self.data[header])
+		return str(message)
+
 class Encryption(object):
-	def __init__(self, data, cipher_key, prf_key, user):
+	def __init__(self, data, cipher_key, prf_key):
 		self.data = data
 		self.cipher_key = cipher_key
 		self.prf_key = prf_key
-		self.user = user
 
 	def encrypted_email(self):
 		message = MIMEMultipart()
@@ -167,7 +189,6 @@ class Encryption(object):
 				return
 			message[header] = encrypt_header_body(self.cipher_key, 
 				self.prf_key, self.data[header], 1)
-			print message[header]
 		for part in self.data.walk():
 			if (part.get_content_maintype() == 'multipart') or (part.get_content_subtype() 
 				!= 'plain'):
@@ -192,10 +213,9 @@ class Encryption(object):
 			print part.get_payload()
 
 class Decryption(object):
-	def __init__(self, data, cipher_key, user):
+	def __init__(self, data, cipher_key):
 		self.data = data
 		self.cipher_key = cipher_key
-		self.user = user
 
 	def decrypt_email(self):
 		message = MIMEMultipart()
