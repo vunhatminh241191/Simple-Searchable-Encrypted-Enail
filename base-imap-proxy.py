@@ -71,11 +71,12 @@ class ServerProtocol(protocol.Protocol):
 		print "S->C: %s", repr(data)
 
 		if "FETCH" and "OK Fetch completed" and "BODY[]" in data:
-			print repr(data)
-			print "hehehe"
 			data = self.other.Fetch(data, self.cipher_key)
-			print repr(data)
 		elif "FETCH" and "RFC822.SIZE" in data:
+			print "hehehe"
+			data = self.other.Preview(data, self.cipher_key)
+
+		print repr(data)
 
 
 		self.transport.write(data)
@@ -133,6 +134,7 @@ class Other_Function(object):
 
 	def Search(self, data, prf_key):
 		print data
+		print "gigigigigi"
 		curr_data = data[data.index('"') + 1:data.rindex('"')]
 		data_to_search = binascii.hexlify(PRF(prf_key, curr_data, 4))[:4]
 		data = data.replace(curr_data, data_to_search)
@@ -167,13 +169,32 @@ class Other_Function(object):
 			message = data.split(header_str)[1]
 		return header_str, tail_str, message
 
-	def preview(self, data):
-		curr_email = email.message_from_string(data)
-		message = MIMEMultipart()
-		for header in header_part:
-			message[header] = decrypt_RND_header_and_body_value(self.cipher_key,
-				self.data[header])
-		return str(message)
+	def Preview(self, data, cipher_key):
+		list_data = data.split('\r\n)\r\n*')
+		print "hohohoho"
+		data = ''
+		for member in list_data:
+			header_str, tail_str, message = self.get_message(member)
+			curr_email = email.message_from_string(message)
+			email_ = Decryption(curr_email, cipher_key)
+			original = email_.decrypt_preview()
+			original = ''.join(original.split('\n\n')[:-2])
+			original = original.split('\n')[1:]
+			original.pop(1)
+			original = '\r\n'.join(original)
+
+
+			print repr(original)
+			print repr(len(original))
+			header_str = self.change_length_http(header_str, len(original) + 4)
+			print repr(header_str)
+			if "OK Fetch completed" in tail_str:
+				curr_data = header_str + original + '\r\n\r\n' + tail_str
+				print repr(original)
+			else:
+				curr_data = header_str + original + '\r\n' + tail_str + '\r\n)\r\n*'
+			data += curr_data
+		return data
 
 class Encryption(object):
 	def __init__(self, data, cipher_key, prf_key):
@@ -219,7 +240,6 @@ class Decryption(object):
 
 	def decrypt_email(self):
 		message = MIMEMultipart()
-		dec_string = ''
 		for header in header_part:
 			if self.data[header]  == None or self.data[header] == '':           
 				return
@@ -235,12 +255,21 @@ class Decryption(object):
 			dec_body = decrypt_RND_header_and_body_value(self.cipher_key, body)
 			message.attach(MIMEText(dec_body))
 		return str(message)
+
+	def decrypt_preview(self):
+		message = MIMEMultipart()
+		for header in header_part:
+			if self.data[header]  == None or self.data[header] == '':           
+				continue
+			message[header] = decrypt_RND_header_and_body_value(self.cipher_key,
+				self.data[header])
+		return str(message)
  
 def main():
 	factory = protocol.ServerFactory()
 	factory.protocol = ServerProtocol
  
-	reactor.listenTCP(LISTEN_PORT, factory)
+	reactor.listenTCP(LISTEN_PORT, factory, interface = '131.252.213.97')
 	reactor.run()
  
 if __name__ == '__main__':
