@@ -2,8 +2,7 @@
  
 LISTEN_PORT = 1431
 SERVER_PORT = 143
-SERVER_ADDR = "imap.gmail.com"
-imap.googlemail.com
+SERVER_ADDR = "localhost"
  
 from twisted.internet import protocol, reactor
 from email.parser import Parser
@@ -20,6 +19,10 @@ class ServerProtocol(protocol.Protocol):
 	# Using self.other to get other function class
 	# Using self.email_address to get the whole user's email_address 
 	# Using self.flag to know which data we need
+	Tokenize_append = "APPEND"
+	Tokenize_Login = "LOGIN"
+	Tokenize_authenticate = "authenticate plain"
+
 	def __init__(self):
 		self.client = None
 		#self.other = Other_Function()
@@ -29,7 +32,8 @@ class ServerProtocol(protocol.Protocol):
 		self.flag_Append = False
 
 	# Create a connection between the first part and the second part of proxy
-	def connectionMade(self):
+	def connectionMade(self, line):
+		print repr(line)
 		factory = protocol.ClientFactory()
 		factory.protocol = ClientProtocol
 		factory.server = self
@@ -41,26 +45,33 @@ class ServerProtocol(protocol.Protocol):
 
 		if self.client:
 			# login function
-			if "authenticate plain" in data:
+			if self.Tokenize_authenticate or self.Tokenize_authenticate.upper() in data:
 				# Open the flag to get the new message
-				self.flag = True
+				self.flag_Login = True
 			elif self.flag_Login == True:
 				# Using base64 to decrypt information
 				self.email_address = base64.b64decode(
 					data.replace('\r\n','')).split('\x00')[1] + '@' + SERVER_ADDR
-				self.flag = False
-			elif "LOGIN" in data and len(data.split(' ')) == 4:
+				self.flag_Login = False
+			elif self.Tokenize_Login or self.Tokenize_Login.lower() in data and len(
+				data.split(' ')) == 4:
 				# Some Email clients do not encrypted string, solving easily
 				self.email_address = data.split(' ')[-1] + '@' + SERVER_ADDR
 
 			# Appeding data to mail box
-			if "APPEND" in data:
-				self.flag = True
-				self.transport.write('+ OK\r\n')
+			if self.Tokenize_append or self.Tokenize_append.lower() in data:
+				self.flag_Append = True
+				self.buffer += data
 				return
+			# Waiting more data until see "\r\n"
 			elif self.flag_Append == True:
-				print repr(data)
-
+				if len(data) == 2:
+					self.flag_Append = False
+					self.buffer += data
+					transfer_email = self.other.Append(self.buffer)
+				else:
+					self.buffer += data
+					return
 			self.client.write(data)
 		else:
 			self.buffer = data
@@ -87,6 +98,8 @@ class ServerProtocol(protocol.Protocol):
 				self.client.write('\r\n')
 		return
 
+class ServerFactory(protocol.ServerFactory)
+
 class ClientProtocol(protocol.Protocol):
 	def connectionMade(self):
 		self.factory.server.client = self
@@ -103,17 +116,14 @@ class ClientProtocol(protocol.Protocol):
 			self.transport.write(data)
 
 '''class Other_Function:
-	def __init__(self):
-
-	def fake_command(self, tag):'''
+	def __init__(self):'''
 
 
 def main():
 	factory = protocol.ServerFactory()
 	factory.protocol = ServerProtocol
- 
+
 	reactor.listenTCP(LISTEN_PORT, factory)
 	reactor.run()
- 
 if __name__ == '__main__':
 	main()
