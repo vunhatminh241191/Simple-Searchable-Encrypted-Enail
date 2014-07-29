@@ -1,0 +1,14 @@
+[Proxy]
+pass_proxy: chilun143
+decrypt_folder: Inbox
+
+[Server]
+ubuntu.com = localhost
+@gmail.com = imap.gmail.com
+@yahoo.com = imap.mail.yahoo.com
+@pdx.edu = imap.gmail.com
+
+[Fake_Command]
+connect_server = * OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE STARTTLS AUTH=PLAIN] Dovecot (Ubuntu) ready.\r\n
+
+capability = * CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE STARTTLS AUTH=PLAIN\r\nGCKC0 OK Pre-login capabilities listed, post-login capabilities have more.\r\n
