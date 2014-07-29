@@ -7,7 +7,7 @@ from twisted.internet import protocol, reactor, defer
 from email.parser import Parser
 from email.MIMEMultipart import MIMEMultipart
 from email.MIMEText import MIMEText
-import email, imaplib, re, StringIO, ConfigParser, base64
+import email, imaplib, re, StringIO, ConfigParser, base64, sys
 from encryption import *
 
 header_part = ['From', 'To', 'Subject']
@@ -25,29 +25,23 @@ class ServerProtocol(protocol.Protocol):
 	# Using self.email_address to get the whole user's email_address 
 	# Using self.flag to know which data we need
 
-	def __init__(self):
+	def __init__(self, server):
 		self.client = None
 		#self.other = Other_Function()
 		self.email_address = None
 		self.buffer = None
 		self.flag_Login = False
 		self.flag_Append = False
-		self.server = None
+		self.server = server
 		self.d = defer.Deferred()
 
 	# Create a connection between the first part and the second part of proxy
+
 	def connectionMade(self):
 		factory = protocol.ClientFactory()
 		factory.protocol = ClientProtocol
 		factory.server = self
-		if self.server is None:
-			self.transport.write(config.get('Fake_Command', 'connect_server') + '\r\n')
-			print SERVER_ADDR
-			self.d.addCallback(self.dataReceived)
-			print SERVER_ADDR
-		else:
-			reactor.connectTCP(self.server, SERVER_PORT, factory)
-
+		reactor.connectTCP(self.server, SERVER_PORT, factory)
 
 	# The gate Client sending data to Proxy
 	def dataReceived(self, data):
@@ -55,7 +49,19 @@ class ServerProtocol(protocol.Protocol):
 
 		if self.client:
 			print "hehehehe"
+
+			if Tokenize_authenticate in data.upper():
+				# Open the flag to get the new message
+				self.flag_Login = True
+			elif self.flag_Login == True:
+				# Using base64 to decrypt information
+				self.email_address = base64.b64decode(
+					data.replace('\r\n','')).split('\x00')[1] + '@' + SERVER_ADDR
+				self.flag_Login = False
+			elif Tokenize_Login in data.upper() and len(data.split(' ')) == 4:
+
 			# Appeding data to mail box
+
 			if self.Tokenize_append or self.Tokenize_append.lower() in data:
 				self.flag_Append = True
 				self.buffer += data
@@ -75,22 +81,18 @@ class ServerProtocol(protocol.Protocol):
 			self.buffer = data
 			print "hohohoho"
 			# login function
-			if Tokenize_authenticate in data.upper():
-				# Open the flag to get the new message
-				self.flag_Login = True
-			elif self.flag_Login == True:
-				# Using base64 to decrypt information
-				self.email_address = base64.b64decode(
-					data.replace('\r\n','')).split('\x00')[1] + '@' + SERVER_ADDR
-				self.flag_Login = False
-			elif Tokenize_Login in data.upper() and len(data.split(' ')) == 4:
+			
 				# Some Email clients do not encrypted string, solving easily
 				if "@" in data:
 					self.server = config.get('Server', data.split(' ')[-2].split("@")[-1])
-					self.d.addCallback(self.connectionMade)
 				else:
 					self.server = config.get('Server', 'ubuntu.com')
-					self.d.addCallback(self.connectionMade)
+
+				factory.protocol = ClientProtocol
+				factory.server = self
+				reactor.connectTCP(self.server, SERVER_PORT, factory)
+
+				self.client.write(self.buffer)
 
 			if Tokennize_capability in data.lower() and len(data.split(' ')) == 2:
 				uid_command = data.split(' ')[0]
@@ -140,11 +142,15 @@ class ClientProtocol(protocol.Protocol):
 		if data:
 			self.transport.write(data)
 
-def main():
+def main(argv):
+	print argv
 	factory = protocol.ServerFactory()
-	factory.protocol = ServerProtocol
+	if len(argv) == 1:
+		factory.protocol = ServerProtocol(config.get('Server', argv[0]))
+	else:
+		print "I don't understand which server you want to connect"
 
 	reactor.listenTCP(LISTEN_PORT, factory)
 	reactor.run()
 if __name__ == '__main__':
-	main()
+	main(sys.argv[1:])
