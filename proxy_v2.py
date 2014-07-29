@@ -2,7 +2,6 @@
  
 LISTEN_PORT = 1431
 SERVER_PORT = 143
-SERVER_ADDR = "localhost"
  
 from twisted.internet import protocol, reactor, defer
 from email.parser import Parser
@@ -17,7 +16,7 @@ Tokenize_Login = "LOGIN"
 Tokenize_authenticate = "authenticate plain"
 Tokennize_capability = "capability"
 config = ConfigParser.ConfigParser()
-config.read("/home/minhvu/Desktop/ssee/config_proxys")
+config.read("/home/minhvu/Desktop/ssee/config_proxy")
 
 class ServerProtocol(protocol.Protocol):
 	
@@ -33,17 +32,21 @@ class ServerProtocol(protocol.Protocol):
 		self.buffer = None
 		self.flag_Login = False
 		self.flag_Append = False
+		self.server = None
 		self.d = defer.Deferred()
-		self.other = Other_Functions()
 
 	# Create a connection between the first part and the second part of proxy
 	def connectionMade(self):
 		factory = protocol.ClientFactory()
 		factory.protocol = ClientProtocol
 		factory.server = self
-		self.transport.write(self.other.get_config("Fake_Command", "connect_server"))
-		self.d.addCallback(self.dataReceived)
-		#reactor.connectTCP(SERVER_ADDR, SERVER_PORT, factory)
+		if self.server is None:
+			self.transport.write(config.get('Fake_Command', 'connect_server') + '\r\n')
+			print SERVER_ADDR
+			self.d.addCallback(self.dataReceived)
+			print SERVER_ADDR
+		else:
+			reactor.connectTCP(self.server, SERVER_PORT, factory)
 
 
 	# The gate Client sending data to Proxy
@@ -51,7 +54,7 @@ class ServerProtocol(protocol.Protocol):
 		print "C->S: %s", repr(data)
 
 		if self.client:
-
+			print "hehehehe"
 			# Appeding data to mail box
 			if self.Tokenize_append or self.Tokenize_append.lower() in data:
 				self.flag_Append = True
@@ -70,9 +73,9 @@ class ServerProtocol(protocol.Protocol):
 			self.client.write(data)
 		else:						
 			self.buffer = data
-			
+			print "hohohoho"
 			# login function
-			if self.Tokenize_authenticate in data.upper():
+			if Tokenize_authenticate in data.upper():
 				# Open the flag to get the new message
 				self.flag_Login = True
 			elif self.flag_Login == True:
@@ -80,17 +83,23 @@ class ServerProtocol(protocol.Protocol):
 				self.email_address = base64.b64decode(
 					data.replace('\r\n','')).split('\x00')[1] + '@' + SERVER_ADDR
 				self.flag_Login = False
-			elif self.Tokenize_Login or self.Tokenize_Login.lower() in data and len(
-				data.split(' ')) == 4:
+			elif Tokenize_Login in data.upper() and len(data.split(' ')) == 4:
 				# Some Email clients do not encrypted string, solving easily
-				self.email_address = data.split(' ')[-1] + '@' + SERVER_ADDR
+				if "@" in data:
+					self.server = config.get('Server', data.split(' ')[-2].split("@")[-1])
+					self.d.addCallback(self.connectionMade)
+				else:
+					self.server = config.get('Server', 'ubuntu.com')
+					self.d.addCallback(self.connectionMade)
 
-			if self.Tokennize_capability in data.lower() and len(data.split(' ')) == 2:
+			if Tokennize_capability in data.lower() and len(data.split(' ')) == 2:
 				uid_command = data.split(' ')[0]
 				curr_data_1 = config.get('Fake_Command', 'capability')
-				curr_data_1 = curr_data_1.replace(curr_data_1.split('\r\n')[1].split(' ')[0]
+				curr_data_1 = curr_data_1.replace(curr_data_1.split('\\r\\n')[1].split(' ')[0]
 					, uid_command)
-				self.transport.write(curr_data_1)
+				self.transport.write(curr_data_1.replace('\\r\\n', '\r\n') + '\r\n')
+				self.buffer = None
+
 
 
 	# The gate Proxy sending data to Client
@@ -130,17 +139,6 @@ class ClientProtocol(protocol.Protocol):
 	def write(self, data):
 		if data:
 			self.transport.write(data)
-
-class Other_Functions(object):
-
-	def get_config(self, section, option):
-		options = config.options(section)
-		for op in options:
-			if op is option:
-				data = config.get(section, op)
-				return data
-
-
 
 def main():
 	factory = protocol.ServerFactory()
