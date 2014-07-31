@@ -4,6 +4,8 @@ from Crypto.Hash import HMAC
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import PBKDF2
 import Crypto.Random
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEText import MIMEText
 
 stopwords = set("a an and be for from fw fwd if is it of on or re the than that this then".split())
 
@@ -12,7 +14,7 @@ class Encryption:
 	# Tokenization methods:
 	TOKENIZE_EMAIL_ADDRESSES = 0	# Used for header fields like From, To, CC
 	TOKENIZE_BLANK_SPACES = 1		# Tokenize just on blank spaces (default)
-
+	TOKENIZE_HEADER_PART = ['From', 'To', 'Cc', 'Bcc', 'Subject']
 	# Number of characters for the tags
 	__tag_length = 4
 
@@ -116,19 +118,44 @@ class Encryption:
 	# other headers stored under their MIME names.
 	def encrypt_email(self, plain_email):
 		salt = binascii.hexlify(Crypto.Random.get_random_bytes(16))
-		enc_email = {}
-		for key in plain_email:
-			key = key.lower().capitalize()
-			IV = SHA256.new(salt + key).digest()[:16]
-			IV += SHA256.new(salt + key + 'Snippet').digest()[:16]
-			if key == 'Body':
-				enc_email[key] = self.encrypt_and_tag(IV, plain_email[key], self.TOKENIZE_BLANK_SPACES, 2)
-			elif key == 'Subject':
-				enc_email[key] = self.encrypt_and_tag(IV, plain_email[key], self.TOKENIZE_BLANK_SPACES, 1)
-			elif key in ['From', 'To', 'Cc', 'Bcc']:
-				enc_email[key] = self.encrypt_and_tag(IV, plain_email[key], self.TOKENIZE_EMAIL_ADDRESSES, 0)
+		print repr(salt)
+		enc_email = MIMEMultipart()
+
+		for header in self.TOKENIZE_HEADER_PART:
+			IV = self._create_IV(header, salt)
+
+			print header
+			print plain_email[header]
+			if header == 'Subject':
+				enc_email[header] = self.encrypt_and_tag(IV, plain_email[header]
+					, self.TOKENIZE_BLANK_SPACES, 1)
+			else:
+				if header != None:
+					enc_email[header] = self.encrypt_and_tag(IV, plain_email[header]
+						, self.TOKENIZE_EMAIL_ADDRESSES, 0)
+
+		for part in plain_email.walk():
+			IV = self._create_IV('Body', salt)
+			if (part.get_content_maintype() == 'multipart') and (
+				part.get_content_subtype() != 'plain'):
+				continue
+			body = part.get_payload()
+			if body == None:
+				return
+			enc_body = self.encrypt_and_tag(IV, body
+				, self.TOKENIZE_BLANK_SPACES, 2)
+			enc_email.attach(MIMEText(enc_body))
+
+		print "From Before" + enc_email['From']
 		enc_email['From'] = salt + '.' + enc_email['From']
+		print "From After" + enc_email['From']
+		
 		return enc_email
+
+	def _create_IV(self, header, salt):
+		IV = SHA256.new(salt + header).digest()[:16]
+		IV += SHA256.new(salt + header + 'Snippet').digest()[:16]
+		return IV
 
 	# Takes in a plain email and returns an encrypted one. Both the argument
 	# and return value are dictionaries with the body stored under 'Body' and
