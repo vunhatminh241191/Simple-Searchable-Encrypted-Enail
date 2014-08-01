@@ -45,7 +45,8 @@ class Encryption:
 		# This is needed because the AES function will not pad the string
 		plaintext += chr(0) * (16-(len(plaintext) % 16))
 		# Encrypt and return two pieces of binary data
-		return binascii.hexlify(cipher.encrypt(plaintext)), binascii.hexlify(cipher.digest())
+		return binascii.hexlify(cipher.encrypt(plaintext)), binascii.hexlify(
+			cipher.digest())
 
 	# This function splits all the elements in the headers with lists of emails
 	def __split_element(self, data):
@@ -89,7 +90,8 @@ class Encryption:
 			tags.append(self.__PRF(token))
 		# A block is 30 characters with space for padding
 		if snippetBlocks > 0:
-			snippet, s_digest = self.__encrypt(IV[16:], plaintext[:snippetBlocks*15])
+			snippet, s_digest = self.__encrypt(IV[16:]
+				, plaintext[:snippetBlocks*15])
 			ctext, c_digest = self.__encrypt(IV[:16], plaintext)
 			digest = s_digest + '.' + snippet
 			ciphertext = c_digest + '.' + ctext
@@ -106,7 +108,8 @@ class Encryption:
 	def decrypt(self, IV, ciphertext):
 		sections = ciphertext.split('.')
 		cipher = AES.new(self.__cipher_key, AES.MODE_GCM, IV)
-		plaintext = cipher.decrypt(binascii.unhexlify(sections[1])).replace(chr(0), '')
+		plaintext = cipher.decrypt(binascii.unhexlify(
+			sections[1])).replace(chr(0), '')
 		try:
 			cipher.verify(binascii.unhexlify(sections[0]))
 			return plaintext
@@ -118,20 +121,17 @@ class Encryption:
 	# other headers stored under their MIME names.
 	def encrypt_email(self, plain_email):
 		salt = binascii.hexlify(Crypto.Random.get_random_bytes(16))
-		print repr(salt)
 		enc_email = MIMEMultipart()
 
 		for header in self.TOKENIZE_HEADER_PART:
 			IV = self._create_IV(header, salt)
-
-			print header
-			print plain_email[header]
 			if header == 'Subject':
 				enc_email[header] = self.encrypt_and_tag(IV, plain_email[header]
 					, self.TOKENIZE_BLANK_SPACES, 1)
 			else:
-				if header != None:
-					enc_email[header] = self.encrypt_and_tag(IV, plain_email[header]
+				if plain_email[header] != None:
+					enc_email[header] = self.encrypt_and_tag(IV
+						, plain_email[header]
 						, self.TOKENIZE_EMAIL_ADDRESSES, 0)
 
 		for part in plain_email.walk():
@@ -146,9 +146,7 @@ class Encryption:
 				, self.TOKENIZE_BLANK_SPACES, 2)
 			enc_email.attach(MIMEText(enc_body))
 
-		print "From Before" + enc_email['From']
-		enc_email['From'] = salt + '.' + enc_email['From']
-		print "From After" + enc_email['From']
+		enc_email.replace_header('From', salt + '.' + enc_email['From'])
 		
 		return enc_email
 
@@ -163,14 +161,22 @@ class Encryption:
 	def decrypt_email(self, enc_email):
 		salt = enc_email['From'][:32]
 		enc_email['From'] = enc_email['From'][33:]
-		plain_email = {}
+		plain_email = MIMEMultipart()
+
+		for header in self.TOKENIZE_HEADER_PART:
+			IV = SHA256.new(salt+ header).digest()[:16]
+			if header == 'Subject':
+				plain_email[header] = self.decrypt(IV, enc_email[header][
+					66:enc_email[header].find('.', 99)+1])
 		for key in enc_email:
 			key = key.lower().capitalize()
 			IV = SHA256.new(salt + key).digest()[:16]
 			if key == 'Body':
-				plain_email[key] = self.decrypt(IV, enc_email[key][98:enc_email[key].find('.', 131)+1])
+				plain_email[key] = self.decrypt(IV, enc_email[key][
+					98:enc_email[key].find('.', 131)+1])
 			elif key == 'Subject':
-				plain_email[key] = self.decrypt(IV, enc_email[key][66:enc_email[key].find('.', 99)+1])
+				plain_email[key] = self.decrypt(IV, enc_email[key][
+					66:enc_email[key].find('.', 99)+1])
 			elif key in ['From', 'To', 'Cc', 'Bcc']:
 				plain_email[key] = self.decrypt(IV, enc_email[key])
 		return plain_email

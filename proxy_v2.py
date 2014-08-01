@@ -1,13 +1,13 @@
 #!/usr/bin/env python
  
-LISTEN_PORT = 1431
+LISTEN_PORT = 1432
 SERVER_PORT = 143
  
 from twisted.internet import protocol, reactor, defer
 from email.parser import Parser
 from email.MIMEMultipart import MIMEMultipart
 from email.MIMEText import MIMEText
-import email, imaplib, re, StringIO, ConfigParser, base64, sys
+import email, imaplib, re, StringIO, ConfigParser, base64, sys, time
 from encryption import *
 
 header_part = ['From', 'To', 'Subject']
@@ -75,14 +75,20 @@ class ServerProtocol(protocol.Protocol):
 
 			# Appeding data to mail box
 			if Tokenize_append in data.upper():
+				print "hehehehe"
 				self.flag_Append = True
 				self.buffer += data
 				return
+			time.sleep(0.5)
+			if data == self.buffer:
+				self.client.write('\r\n')
 			# Waiting more data until see "\r\n"
 			elif self.flag_Append == True:
 				if len(data) == 2:
+					print "hahahaha"
 					self.flag_Append = False
 					self.client.write(self.other.Append(self.buffer))
+					#data = self.other.Append(self.buffer)
 					self.client.write('\r\n')
 					return
 				else:
@@ -100,7 +106,7 @@ class ServerProtocol(protocol.Protocol):
 	def write(self, data):
 		print "S->C: %s", repr(data)
 
-		print self.folder_selection
+		#print self.folder_selection
 
 		if (self.folder_selection == Tokenize_Inbox) and (
 			"FETCH" and "OK Fetch completed" and "BODY[]" in data):
