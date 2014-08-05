@@ -93,6 +93,7 @@ class Encryption:
 			snippet, s_digest = self.__encrypt(IV[16:]
 				, plaintext[:snippetBlocks*15])
 			ctext, c_digest = self.__encrypt(IV[:16], plaintext)
+			print c_digest
 			digest = s_digest + '.' + snippet
 			ciphertext = c_digest + '.' + ctext
 		else:
@@ -135,13 +136,13 @@ class Encryption:
 						, self.TOKENIZE_EMAIL_ADDRESSES, 0)
 
 		for part in plain_email.walk():
-			IV = self._create_IV('Body', salt)
 			if (part.get_content_maintype() == 'multipart') and (
 				part.get_content_subtype() != 'plain'):
 				continue
 			body = part.get_payload()
 			if body == None:
 				return
+			IV = self._create_IV('Body', salt)
 			enc_body = self.encrypt_and_tag(IV, body
 				, self.TOKENIZE_BLANK_SPACES, 2)
 			enc_email.attach(MIMEText(enc_body))
@@ -160,7 +161,7 @@ class Encryption:
 	# other headers stored under their MIME names.
 	def decrypt_email(self, enc_email):
 		salt = enc_email['From'][:32]
-		enc_email['From'] = enc_email['From'][33:]
+		enc_email.replace_header('From', enc_email['From'][33:])
 		plain_email = MIMEMultipart()
 
 		for header in self.TOKENIZE_HEADER_PART:
@@ -168,15 +169,18 @@ class Encryption:
 			if header == 'Subject':
 				plain_email[header] = self.decrypt(IV, enc_email[header][
 					66:enc_email[header].find('.', 99)+1])
-		for key in enc_email:
-			key = key.lower().capitalize()
-			IV = SHA256.new(salt + key).digest()[:16]
-			if key == 'Body':
-				plain_email[key] = self.decrypt(IV, enc_email[key][
-					98:enc_email[key].find('.', 131)+1])
-			elif key == 'Subject':
-				plain_email[key] = self.decrypt(IV, enc_email[key][
-					66:enc_email[key].find('.', 99)+1])
-			elif key in ['From', 'To', 'Cc', 'Bcc']:
-				plain_email[key] = self.decrypt(IV, enc_email[key])
+			else:
+				if enc_email[header] != None:
+					plain_email[header] = self.decrypt(IV, enc_email[header])
+
+		for part in enc_email.walk():
+			if (part.get_content_maintype() == 'multipart') and (
+				part.get_content_subtype() != 'plain'):
+				continue
+			body = part.get_payload()
+			if body == None:
+				return
+			IV = SHA256.new(salt + 'Body').digest()[:16]
+			plain_body = self.decrypt(IV, body[98:body.find('.', 131)+1])
+			plain_email.attach(MIMEText(plain_body))
 		return plain_email

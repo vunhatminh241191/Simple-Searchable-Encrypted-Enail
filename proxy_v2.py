@@ -36,6 +36,7 @@ class ServerProtocol(protocol.Protocol):
 		self.buffer = None
 		self.flag_Login = False
 		self.flag_Append = False
+		self.flag_Fetch = False
 		self.d = defer.Deferred()
 		self.other = None
 		self.folder_selection = None
@@ -75,7 +76,6 @@ class ServerProtocol(protocol.Protocol):
 
 			# Appeding data to mail box
 			if Tokenize_append in data.upper():
-				print "hehehehe"
 				self.flag_Append = True
 				self.buffer += data
 				return
@@ -85,10 +85,10 @@ class ServerProtocol(protocol.Protocol):
 			# Waiting more data until see "\r\n"
 			elif self.flag_Append == True:
 				if len(data) == 2:
-					print "hahahaha"
 					self.flag_Append = False
 					self.client.write(self.other.Append(self.buffer))
 					#data = self.other.Append(self.buffer)
+					#self.client.write(data)
 					self.client.write('\r\n')
 					return
 				else:
@@ -110,12 +110,29 @@ class ServerProtocol(protocol.Protocol):
 
 		if (self.folder_selection == Tokenize_Inbox) and (
 			"FETCH" and "OK Fetch completed" and "BODY[]" in data):
-			data = self.other.Fetch(data)
+			self.transport.write(self.other.Fetch(data))
+			return
+		elif (self.folder_selection == Tokenize_Inbox) and (
+			"FETCH" and "BODY[]" in data):
+			self.flag_Fetch = True
+			self.buffer += data
+			return
+		elif self.flag_Fetch == True:
+			if "OK Fetch completed" in data:
+				self.flag_Fetch = False
+				self.transport.write(self.other.Fetch(self.buffer + data))
+				return
+			else:
+				self.buffer += data
+				return
 
-		'''elif (self.folder_selection == Tokenize_Inbox) and (
+		elif (self.folder_selection == Tokenize_Inbox) and (
 			"FETCH" and "RFC822.SIZE" in data):
-			#data = self.other.Preview(data, self.cipher_key)
-			return'''
+			print repr(data)
+			data = self.other.Preview(data)
+			self.transport.write(data)
+			print repr(data)
+			return
 
 		self.transport.write(data)
 
@@ -143,18 +160,38 @@ class Other_Functions(object):
 		plain_email = email.message_from_string('\r\n'.join(data.split('\r\n')[1:]))
 		enc_email = str(self.E.encrypt_email(plain_email)).replace('\n', '\r\n')
 		append_cmd = self.Changing_Length(data.split('\r\n')[0] + '\r\n'
-			, len(enc_email))
+			, len(enc_email) + 4, 0)
 		return append_cmd + enc_email
 
-	def Changing_Length(self, data, new_length):
+	def Changing_Length(self, data, new_length, flag):
 		number = data.split("{")[-1].replace("}\r\n", "")
-		data = data.replace(str(number), str(new_length) + '+')
+		if flag == 0:
+			data = data.replace(str(number), str(new_length) + '+')
+		else:
+			data = data.replace(str(number), str(new_length))
 		return data
 
 	def Fetch(self, data):
 		enc_email = email.message_from_string('\r\n'.join(data.split('\r\n')[1:]))
-		plain_email = str(self.E.decrypt_email(enc_email).replace('\n', '\r\n'))
-		print repr(plain_email)
+		plain_email = str(self.E.decrypt_email(enc_email)).replace('\n', '\r\n')
+		fetch_cmd = self.Changing_Length(data.split('\r\n')[0] + '\r\n'
+			, len(plain_email), 1)
+		fetch_tail = ')\r\n'  + data.split(')\r\n')[-1]
+		return fetch_cmd + plain_email + fetch_tail
+
+	def Preview(self, data):
+		return_data = ''
+		list_enc_Preview = data.split('\r\n)\r\n')[:-1]
+		for member in list_enc_Preview:
+			enc_Preview = email.message_from_string('\r\n'.join(member.split(
+				'\r\n')[1:]))
+			plain_Preview = str(self.E.decrypt_email(enc_Preview)).replace(
+				'\n', '\r\n')
+			preview_cmd = self.Changing_Length(member.split('\r\n')[0] + '\r\n'
+				, len(plain_Preview) + 2, 1)
+			return_data += preview_cmd + plain_Preview + '\r\n)\r\n'
+		return return_data + data.split('\r\n)\r\n')[-1]
+
 
 
 def main(argv):
