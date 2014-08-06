@@ -160,7 +160,7 @@ class Other_Functions(object):
 		plain_email = email.message_from_string('\r\n'.join(data.split('\r\n')[1:]))
 		enc_email = str(self.E.encrypt_email(plain_email)).replace('\n', '\r\n')
 		append_cmd = self.Changing_Length(data.split('\r\n')[0] + '\r\n'
-			, len(enc_email) + 4, 0)
+			, len(enc_email), 0)
 		return append_cmd + enc_email
 
 	def Changing_Length(self, data, new_length, flag):
