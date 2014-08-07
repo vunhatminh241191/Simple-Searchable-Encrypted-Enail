@@ -1,12 +1,8 @@
 #!/usr/bin/env python
  
 LISTEN_PORT = 1431
-SERVER_PORT = 143
  
-from twisted.internet import protocol, reactor, defer
-from email.parser import Parser
-from email.MIMEMultipart import MIMEMultipart
-from email.MIMEText import MIMEText
+from twisted.internet import protocol, reactor, ssl
 import email, imaplib, re, StringIO, ConfigParser, base64, sys, time
 from encryption import *
 
@@ -19,6 +15,9 @@ Tokennize_capability = "capability"
 Tokennize_A = "@"
 Tokenize_Select = "select"
 Tokenize_Inbox = '"INBOX"'
+Tokenize_Compress = 'COMPRESS'
+Tokenize_Fetch = ['OK Fetch completed', 'OK Success']
+Tokenize_Body = ['BODY[]', 'BODY[HEADER.', 'RFC822']
 
 config = ConfigParser.ConfigParser()
 config.read("/home/minhvu/Desktop/ssee/config_proxy")
@@ -37,7 +36,6 @@ class ServerProtocol(protocol.Protocol):
 		self.flag_Login = False
 		self.flag_Append = False
 		self.flag_Fetch = False
-		self.d = defer.Deferred()
 		self.other = None
 		self.folder_selection = None
 
@@ -47,7 +45,12 @@ class ServerProtocol(protocol.Protocol):
 		factory = protocol.ClientFactory()
 		factory.protocol = ClientProtocol
 		factory.server = self
-		reactor.connectTCP(self.factory.SERVER_ADDR, SERVER_PORT, factory)
+		if self.factory.SERVER_ADDR == 'localhost':
+			reactor.connectTCP(self.factory.SERVER_ADDR, self.factory.SERVER_PORT
+				, factory)
+		else:
+			reactor.connectSSL(self.factory.SERVER_ADDR, self.factory.SERVER_PORT
+				, factory, ssl.ClientContextFactory())
 
 	# The gate Client sending data to Proxy
 	def dataReceived(self, data):
@@ -108,31 +111,28 @@ class ServerProtocol(protocol.Protocol):
 
 		#print self.folder_selection
 
-		if (self.folder_selection == Tokenize_Inbox) and (
-			"FETCH" and "OK Fetch completed" and "BODY[]" in data):
-			self.transport.write(self.other.Fetch(data))
-			return
-		elif (self.folder_selection == Tokenize_Inbox) and (
-			"FETCH" and "BODY[]" in data):
+		if (self.folder_selection == Tokenize_Inbox) and ('FETCH' and any(
+			word in data for word in Tokenize_Fetch) and any(
+			word in data for word in Tokenize_Body)):
+			self.transport.write(self.other.Transfer(data))
+		elif (self.folder_selection == Tokenize_Inbox) and ('FETCH' and any(
+			word in data for word in Tokenize_Body)):
 			self.flag_Fetch = True
 			self.buffer += data
 			return
 		elif self.flag_Fetch == True:
-			if "OK Fetch completed" in data:
+			if any(word in data for word in Tokenize_Fetch):
 				self.flag_Fetch = False
-				self.transport.write(self.other.Fetch(self.buffer + data))
+				self.transport.write(self.other.Transfer(self.buffer + data))
 				return
 			else:
 				self.buffer += data
 				return
 
-		elif (self.folder_selection == Tokenize_Inbox) and (
-			"FETCH" and "RFC822.SIZE" in data):
-			print repr(data)
-			data = self.other.Preview(data)
-			self.transport.write(data)
-			print repr(data)
-			return
+		if Tokenize_Compress in data:
+			curr = data.split(Tokenize_Compress)[1]
+			curr = ' '.join(curr.split(' ')[1:])
+			data = data.split(Tokenize_Compress)[0] + curr
 
 		self.transport.write(data)
 
@@ -179,7 +179,7 @@ class Other_Functions(object):
 		fetch_tail = ')\r\n'  + data.split(')\r\n')[-1]
 		return fetch_cmd + plain_email + fetch_tail
 
-	def Preview(self, data):
+	def Transfer(self, data):
 		return_data = ''
 		list_enc_Preview = data.split('\r\n)\r\n')[:-1]
 		for member in list_enc_Preview:
@@ -196,14 +196,18 @@ class Other_Functions(object):
 
 def main(argv):
 	factory = protocol.ServerFactory()
-	if len(argv) == 1:
-		factory.SERVER_ADDR = config.get('Server', argv[0])
+	if argv == 1:
+		factory.SERVER_ADDR = 'imap.gmail.com'
+		factory.SERVER_PORT = 993
+		factory.protocol = ServerProtocol
+		reactor.listenSSL(LISTEN_PORT, factory, ssl.DefaultOpenSSLContextFactory(
+			'server.key', 'server.crt'))
 	else:
 		factory.SERVER_ADDR = 'localhost'
-	factory.protocol = ServerProtocol
+		factory.SERVER_PORT = 143
+		factory.protocol = ServerProtocol
+		reactor.listenTCP(LISTEN_PORT, factory)
 
-
-	reactor.listenTCP(LISTEN_PORT, factory)
 	reactor.run()
 if __name__ == '__main__':
-	main(sys.argv[1:])
+	main(1)

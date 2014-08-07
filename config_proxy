@@ -4,6 +4,6 @@ decrypt_folder: Inbox
 
 [Server]
 ubuntu.com = localhost
-@gmail.com = imap.gmail.com
-@yahoo.com = imap.mail.yahoo.com
-@pdx.edu = imap.gmail.com
+gmail.com = imap.gmail.com
+yahoo.com = imap.mail.yahoo.com
+pdx.edu = imap.gmail.com
