@@ -1,6 +1,6 @@
 #!/usr/bin/env python
  
-LISTEN_PORT = 1432
+LISTEN_PORT = 1431
 SERVER_PORT = 143
  
 from twisted.internet import protocol, reactor, defer
