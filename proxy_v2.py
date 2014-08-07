@@ -10,7 +10,7 @@ header_part = ['From', 'To', 'Subject']
 
 Tokenize_append = "APPEND"
 Tokenize_Login = "LOGIN"
-Tokenize_authenticate = "authenticate plain"
+Tokenize_authenticate = 'authenticate plain'
 Tokennize_capability = "capability"
 Tokennize_A = "@"
 Tokenize_Select = "select"
@@ -59,23 +59,18 @@ class ServerProtocol(protocol.Protocol):
 		if self.client:
 
 			# Login function to get data 
-			user_address = '' 
-			if Tokenize_authenticate in data.upper():
-				# Open the flag to get the new message
+			if Tokenize_authenticate in data.lower():
 				self.flag_Login = True
 			elif self.flag_Login == True:
-				# Using base64 to decrypt information, bc IMAP extension using 
-				# base64 to encode data "Authenticate Command"
-				user_address = base64.b64decode(
-					data.replace('\r\n','')).split('\x00')[1]
+				self.other = Other_Functions(base64.b64decode(
+					data.replace('\r\n','')).split('\x00')[1])
+				self.flag_Login = False
 			elif Tokenize_Login in data.upper() and len(data.split(' ')) == 4:
-				user_address = data.split(' ')[-2]
-			if not Tokennize_A in data:
-				#check if user_address is right or wrong
-				user_address = user_address + '@ubuntu.com'
-			#create prf_key and cipher_key
-			self.other = Other_Functions(user_address)
-			self.flag_Login = False
+				if not Tokennize_A in data.split(' ')[-2]:
+					self.other = Other_Functions(data.split(' ')[-2] + 
+						'@ubuntu.com')
+				else:
+					self.other = Other_Functions(data.split(' ')[-2])
 
 			# Appeding data to mail box
 			if Tokenize_append in data.upper():
@@ -171,28 +166,26 @@ class Other_Functions(object):
 			data = data.replace(str(number), str(new_length))
 		return data
 
-	def Fetch(self, data):
-		enc_email = email.message_from_string('\r\n'.join(data.split('\r\n')[1:]))
-		plain_email = str(self.E.decrypt_email(enc_email)).replace('\n', '\r\n')
-		fetch_cmd = self.Changing_Length(data.split('\r\n')[0] + '\r\n'
-			, len(plain_email), 1)
-		fetch_tail = ')\r\n'  + data.split(')\r\n')[-1]
-		return fetch_cmd + plain_email + fetch_tail
-
 	def Transfer(self, data):
 		return_data = ''
 		list_enc_Preview = data.split('\r\n)\r\n')[:-1]
-		for member in list_enc_Preview:
-			enc_Preview = email.message_from_string('\r\n'.join(member.split(
-				'\r\n')[1:]))
-			plain_Preview = str(self.E.decrypt_email(enc_Preview)).replace(
-				'\n', '\r\n')
-			preview_cmd = self.Changing_Length(member.split('\r\n')[0] + '\r\n'
-				, len(plain_Preview) + 2, 1)
-			return_data += preview_cmd + plain_Preview + '\r\n)\r\n'
-		return return_data + data.split('\r\n)\r\n')[-1]
-
-
+		if len(list_enc_Preview) > 0:
+			for member in list_enc_Preview:
+				enc_Preview = email.message_from_string('\r\n'.join(member.split(
+					'\r\n')[1:]))
+				plain_Preview = str(self.E.decrypt_email(enc_Preview)).replace(
+					'\n', '\r\n')
+				preview_cmd = self.Changing_Length(member.split('\r\n')[0] + '\r\n'
+					, len(plain_Preview) + 2, 1)
+				return_data += preview_cmd + plain_Preview + '\r\n)\r\n'
+			return return_data + data.split('\r\n)\r\n')[-1]
+		else:
+			enc_email = email.message_from_string('\r\n'.join(data.split('\r\n')[1:]))
+			plain_email = str(self.E.decrypt_email(enc_email)).replace('\n', '\r\n')
+			fetch_cmd = self.Changing_Length(data.split('\r\n')[0] + '\r\n'
+				, len(plain_email), 1)
+			fetch_tail = ')\r\n'  + data.split(')\r\n')[-1]
+			return fetch_cmd + plain_email + fetch_tail
 
 def main(argv):
 	factory = protocol.ServerFactory()

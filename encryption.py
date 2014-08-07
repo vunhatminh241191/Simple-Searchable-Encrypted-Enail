@@ -93,7 +93,7 @@ class Encryption:
 			snippet, s_digest = self.__encrypt(IV[16:]
 				, plaintext[:snippetBlocks*15])
 			ctext, c_digest = self.__encrypt(IV[:16], plaintext)
-			print c_digest
+			#print c_digest
 			digest = s_digest + '.' + snippet
 			ciphertext = c_digest + '.' + ctext
 		else:
@@ -109,6 +109,7 @@ class Encryption:
 	def decrypt(self, IV, ciphertext):
 		sections = ciphertext.split('.')
 		cipher = AES.new(self.__cipher_key, AES.MODE_GCM, IV)
+		#print 'text' + ciphertext
 		plaintext = cipher.decrypt(binascii.unhexlify(
 			sections[1])).replace(chr(0), '')
 		try:
@@ -178,8 +179,8 @@ class Encryption:
 				part.get_content_subtype() != 'plain'):
 				continue
 			body = part.get_payload()
-			if body == None:
-				return
+			if body == None or body == '':
+				return plain_email
 			IV = SHA256.new(salt + 'Body').digest()[:16]
 			plain_body = self.decrypt(IV, body[98:body.find('.', 131)+1])
 			plain_email.attach(MIMEText(plain_body))
