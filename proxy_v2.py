@@ -1,6 +1,6 @@
 #!/usr/bin/env python
  
-LISTEN_PORT = 1431
+LISTEN_PORT = 1432
  
 from twisted.internet import protocol, reactor, ssl
 import email, imaplib, re, StringIO, ConfigParser, base64, sys, time
@@ -14,7 +14,7 @@ Tokenize_authenticate = 'authenticate plain'
 Tokennize_capability = "capability"
 Tokennize_A = "@"
 Tokenize_Select = "select"
-Tokenize_Inbox = '"INBOX"'
+Tokenize_Inbox = ['inbox', 'inbox.']
 Tokenize_Compress = 'COMPRESS'
 Tokenize_Fetch = ['OK Fetch completed', 'OK Success']
 Tokenize_Body = ['BODY[]', 'BODY[HEADER.', 'RFC822']
@@ -37,7 +37,7 @@ class ServerProtocol(protocol.Protocol):
 		self.flag_Append = False
 		self.flag_Fetch = False
 		self.other = None
-		self.folder_selection = None
+		self.folder_selection = ''
 
 	# Create a connection between the first part and the second part of proxy
 
@@ -74,27 +74,32 @@ class ServerProtocol(protocol.Protocol):
 
 			# Appeding data to mail box
 			if Tokenize_append in data.upper():
-				self.flag_Append = True
-				self.buffer += data
-				return
-			time.sleep(0.5)
-			if data == self.buffer:
-				self.client.write('\r\n')
-			# Waiting more data until see "\r\n"
-			elif self.flag_Append == True:
-				if len(data) == 2:
-					self.flag_Append = False
-					self.client.write(self.other.Append(self.buffer))
-					#data = self.other.Append(self.buffer)
-					#self.client.write(data)
+				message_length, curr_data = self.other._get_length(data)
+				if message_length == len(curr_data) -2:
+					self.client.write(self.other.Append(data))
 					self.client.write('\r\n')
 					return
 				else:
+					self.flag_Append = True
 					self.buffer += data
 					return
+			elif self.flag_Append == True:
+				self.buffer += data
+				message_length, curr_data = self.other._get_length(self.buffer)
+				if message_length == len(curr_data) -2:
+					self.flag_Append = False
+					self.client.write(self.other.Append(data))
+					self.client.write('\r\n')
+					return
+				return
 
 			if Tokenize_Select in data.lower():
-				self.folder_selection = data.split(' ')[-2]
+				if len(data.split(' ')) > 3:
+					self.folder_selection = data.split(' ')[-2].lower()
+				else:
+					self.folder_selection = data.split(' ')[-1].lower()
+				if self.folder_selection.startswith('"') and self.folder_selection.endswith('"'):
+					self.folder_selection = self.folder_selection[1:-1]
 
 			self.client.write(data)
 		else:						
@@ -104,19 +109,18 @@ class ServerProtocol(protocol.Protocol):
 	def write(self, data):
 		print "S->C: %s", repr(data)
 
-		#print self.folder_selection
-
-		if (self.folder_selection == Tokenize_Inbox) and ('FETCH' and any(
-			word in data for word in Tokenize_Fetch) and any(
-			word in data for word in Tokenize_Body)):
+		if len(filter(lambda x: x in self.folder_selection, Tokenize_Inbox)) > 0 and len(
+			filter(lambda x: x in data, Tokenize_Fetch)) > 0 and len(filter(
+			lambda x: x in data, Tokenize_Body)) > 0 and 'FETCH' in data.upper():
 			self.transport.write(self.other.Transfer(data))
-		elif (self.folder_selection == Tokenize_Inbox) and ('FETCH' and any(
-			word in data for word in Tokenize_Body)):
+			return
+		elif len(filter(lambda x: x in self.folder_selection, Tokenize_Inbox)) > 0 and len(
+			filter(lambda x: x in data, Tokenize_Body)) > 0 and 'FETCH' in data.upper():
 			self.flag_Fetch = True
 			self.buffer += data
 			return
 		elif self.flag_Fetch == True:
-			if any(word in data for word in Tokenize_Fetch):
+			if len(filter(lambda x: x in data, Tokenize_Fetch)) > 0:
 				self.flag_Fetch = False
 				self.transport.write(self.other.Transfer(self.buffer + data))
 				return
@@ -166,19 +170,20 @@ class Other_Functions(object):
 			data = data.replace(str(number), str(new_length))
 		return data
 
+	def _encrypted(self, data):
+		enc_Preview = email.message_from_string('\r\n'.join(data.split(
+			'\r\n')[1:]))
+		plain_Preview = str(self.E.decrypt_email(enc_Preview)).replace(
+			'\n', '\r\n')
+		preview_cmd = self.Changing_Length(data.split('\r\n')[0] + '\r\n'
+			, len(plain_Preview) + 2, 1)
+		return preview_cmd + plain_Preview + '\r\n)\r\n'
+
 	def Transfer(self, data):
-		return_data = ''
-		list_enc_Preview = data.split('\r\n)\r\n')[:-1]
+		list_enc_Preview = data.split('\r\n)\r\n*')[:-1]
 		if len(list_enc_Preview) > 0:
-			for member in list_enc_Preview:
-				enc_Preview = email.message_from_string('\r\n'.join(member.split(
-					'\r\n')[1:]))
-				plain_Preview = str(self.E.decrypt_email(enc_Preview)).replace(
-					'\n', '\r\n')
-				preview_cmd = self.Changing_Length(member.split('\r\n')[0] + '\r\n'
-					, len(plain_Preview) + 2, 1)
-				return_data += preview_cmd + plain_Preview + '\r\n)\r\n'
-			return return_data + data.split('\r\n)\r\n')[-1]
+			return reduce(lambda x, y: x+y, map(self._encrypted
+				, list_enc_Preview)) + data.split('\r\n)\r\n')[-1]
 		else:
 			enc_email = email.message_from_string('\r\n'.join(data.split('\r\n')[1:]))
 			plain_email = str(self.E.decrypt_email(enc_email)).replace('\n', '\r\n')
@@ -186,6 +191,11 @@ class Other_Functions(object):
 				, len(plain_email), 1)
 			fetch_tail = ')\r\n'  + data.split(')\r\n')[-1]
 			return fetch_cmd + plain_email + fetch_tail
+
+	def _get_length(self, data):
+		number = int(data.split('\r\n')[0].split('{')[-1].replace('+}', ''))
+		data = '\r\n'.join(data.split('\r\n')[1:])
+		return number, data
 
 def main(argv):
 	factory = protocol.ServerFactory()
@@ -203,4 +213,4 @@ def main(argv):
 
 	reactor.run()
 if __name__ == '__main__':
-	main(1)
+	main(2)

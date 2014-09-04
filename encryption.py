@@ -127,11 +127,12 @@ class Encryption:
 
 		for header in self.TOKENIZE_HEADER_PART:
 			IV = self._create_IV(header, salt)
-			if header == 'Subject':
+			if header == 'Subject' and plain_email[header] != None:
 				enc_email[header] = self.encrypt_and_tag(IV, plain_email[header]
 					, self.TOKENIZE_BLANK_SPACES, 1)
 			else:
-				if plain_email[header] != None:
+				print header
+				if plain_email[header] != None and plain_email[header] != '':
 					enc_email[header] = self.encrypt_and_tag(IV
 						, plain_email[header]
 						, self.TOKENIZE_EMAIL_ADDRESSES, 0)
@@ -147,6 +148,10 @@ class Encryption:
 			enc_body = self.encrypt_and_tag(IV, body
 				, self.TOKENIZE_BLANK_SPACES, 2)
 			enc_email.attach(MIMEText(enc_body))
+
+		
+		print repr(enc_email['From'])
+		print repr(salt)
 
 		enc_email.replace_header('From', salt + '.' + enc_email['From'])
 		
