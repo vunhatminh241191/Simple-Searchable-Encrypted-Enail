@@ -1,12 +1,12 @@
 import glob, re, math, Crypto.Random, binascii, os
 from decimal import *
-from encryption import *
+from encryption_1 import *
 from collections import Counter
 from scipy.stats import binom
 
-directory = '/home/home/Downloads/Corpus/#ubuntu+1/*'
-path_name_testing = '/home/home/Desktop/Research/10_day/testing'
-path_name_training = '/home/home/Desktop/Research/10_day/training'
+directory = '/home/minh/Downloads/Corpus/#ubuntu+1/*'
+path_name_testing = '/home/minh/Desktop/Research/10_day/testing'
+path_name_training = '/home/minh/Desktop/Research/10_day/training'
 
 def get_list_file_name(link_file, list_file_comparing=[]):
 	list_file_ = []
@@ -30,14 +30,13 @@ def prepare_writing_file(list_file_training, list_file_testing
 	name_file_training = os.path.join(directory_training, 'training_first_10_days_case_')
 	name_file_testing = os.path.join(directory_testing, 'testing_next_10_day_case_')
 
-	list_word_percentage_training, list_word_count_training, total_words = writing_file(
+	list_word_percentage_training, list_word_count_training, total_words_training = writing_file(
 		list_file_training, name_file_training)
 
-	list_word_percentage_testing, list_word_count_testing, total_words = writing_file(
+	list_word_percentage_testing, list_word_count_testing, total_words_testing = writing_file(
 		list_file_testing, name_file_testing)
 
-	return list_word_count_training, list_word_percentage_training, list_word_count_testing, list_word_percentage_testing
-
+	return list_word_count_training, list_word_percentage_training, list_word_count_testing, list_word_percentage_testing, total_words_training, total_words_testing
 def writing_file(list_file_, directory):
 	list_word_percentage = []
 	list_word_count = []
@@ -48,7 +47,7 @@ def writing_file(list_file_, directory):
 		with open(directory + str(i) + '.txt', 'wb') as f:
 			for file_name in list_file_:
 				counting, word_count = count_and_create_list(file_name, word_count, i)
-				total_words += counting_
+				total_words += counting
 
 			word_percentage = percentage_plain_text(word_count, total_words)
 			list_word_percentage.append(word_percentage)
@@ -63,7 +62,7 @@ def writing_file(list_file_, directory):
 			f.close()
 	return list_word_percentage, list_word_count, total_words
 
-def count_and_create_list(filen_name, word_count, testing,case):
+def count_and_create_list(file_name, word_count, testing_case):
 	count = 0
 	with open(file_name) as f:
 		regex = re.compile('[^a-z]')
@@ -78,16 +77,16 @@ def count_and_create_list(filen_name, word_count, testing,case):
 					testing_word = regex.sub('', word)
 					if testing_word != '':
 						word = testing_word
-						if word not in wordcount:
-							wordcount[word] = 1
+						if word not in word_count:
+							word_count[word] = 1
 						else:
-							wordcount[word] += 1
+							word_count[word] += 1
 		f.close()
-	return count, wordcount
+	return count, word_count
 
 def percentage_plain_text(word_count, total_words):
 	word_percent = {}
-	for word, appearance in dictionary_word.items():
+	for word, appearance in word_count.items():
 		probability_success = float(appearance)/float(total_words)
 		word_percent.update({word:probability_success})
 	return word_percent
@@ -141,19 +140,19 @@ if __name__ == '__main__':
 	directory_training = creating_dir(path_name_training)
 	directory_testing = creating_dir(path_name_testing)
 
-	list_word_count_training, list_word_percentage_training, list_word_count_testing, list_word_percentage_testing = prepare_writing_file(
+	list_word_count_training, list_word_percentage_training, list_word_count_testing, list_word_percentage_testing, total_words_training, total_words_testing = prepare_writing_file(
 		list_file_training, list_file_testing, directory_training, directory_testing)
 
 	list_number_word_tag_training = create_tag(list_word_count_training)
 
 	list_number_word_tag_testing = create_tag(list_word_count_testing)
 
-	for i in range(len(list_word_percent_training)):
-		for word, value in list_word_percent_training[i].items():
-			probability_tag(list_number_word_tag[i], word, value, total_words
+	for i in range(len(list_word_percentage_training)):
+		for word, value in list_word_percentage_training[i].items():
+			probability_tag(list_number_word_tag_training[i], word, value, total_words_training
 				, directory_training)
 
-	for i in range(len(list_word_percent_training)):
-		for word, value in list_word_percent_training[i].items():
-			probability_tag(list_number_word_tag[i], word, value, total_words
+	for i in range(len(list_word_percentage_testing)):
+		for word, value in list_word_percentage_testing[i].items():
+			probability_tag(list_number_word_tag_testing[i], word, value, total_words_testing
 				, directory_testing)
