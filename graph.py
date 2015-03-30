@@ -1,9 +1,18 @@
 import matplotlib.pyplot as plt
-import numpy as np
+import os
+
+path_name_graph = '/home/minh/Desktop/ssee/graph'
+
+def create_directory(path_name):
+	if not os.path.exists(path_name):
+		os.makedirs(path_name)
+	return os.path.abspath(path_name)
+
 
 if __name__ == '__main__':
 	list_word = {}
-	open_file = open('/home/minh/Desktop/ssee/10_day/AAA/finding_word_testing.txt')
+	graph_path = create_directory(path_name_graph)
+	open_file = open('/home/minh/Desktop/ssee/10_day/AAA/finding_word.txt')
 	for line in open_file:
 		word, number = line.rstrip('\n').split(':')[0], int(line.rstrip('\n').split(':')[1])
 		list_word.update({word:number})
@@ -18,5 +27,7 @@ if __name__ == '__main__':
 		my_stick.append(list_word[i][1])
 
 	plt.xticks(x, my_stick)
+	plt.title("Graph Training")
 	plt.plot(x, y)
-	plt.show()
+	os.path.join(graph_path, plt.savefig("graph_10_day.png", dpi=100))
+	plt.draw()

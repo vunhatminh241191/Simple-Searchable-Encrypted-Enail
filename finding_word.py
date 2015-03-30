@@ -1,26 +1,33 @@
-import sys
+import os
 from encryption_1 import *
 
 E = Encryption('chilun1403', 'chilun2411')
-path_name_finding_word = open('/home/minh/Desktop/ssee/10_day/AAA/finding_word_testing.txt','w')
+path_name = '/home/minh/Desktop/ssee/30_day/finding_word'
+list_file_testing = ['/home/minh/Desktop/ssee/30_day/last_testing/1/1.txt', '/home/minh/Desktop/ssee/30_day/last_testing/2/2.txt', '/home/minh/Desktop/ssee/30_day/last_testing/3/3.txt']
 
+def create_dir(path_name):
+	if not os.path.exists(path_name):
+		os.makedirs(path_name)
+	return os.path.abspath(path_name)
 
 if __name__ == '__main__':
 	list_word = {}
-	list_file_word = open('/home/minh/Desktop/ssee/10_day/next_testing/1/1.txt')
-	for line in list_file_word:
-		word = line.split(':')[1].rstrip('\n')
-		tag_word = E.PRF(word)
-		word_training = open('/home/minh/Desktop/ssee/10_day/next_testing/1/' + word + 'testing.txt')
-		for i, line in enumerate(word_training):
-			if tag_word in line:
-				list_word.update({word:i})
-				break
-	list_word = sorted(((v,k) for k, v in list_word.iteritems()))
+	for i in xrange(3):
+		list_file_word = open(list_file_testing[i])
+		for line in list_file_word:
+			word = line.split(':')[1].rstrip('\n')
+			tag_word = E.PRF(word)
+			word_training = open(os.path.dirname(list_file_testing[i]) + word + 'testing.txt')
+			for i, line in enumerate(word_training):
+				if tag_word in line:
+					list_word.update({word:i})
+					break
+		list_word = sorted(((v,k) for k, v in list_word.iteritems()))
 
-	for key, value in list_word:
-		path_name_finding_word.write(value)
-		path_name_finding_word.write(':')
-		path_name_finding_word.write(str(key))
-		path_name_finding_word.write('\n')
-	path_name_finding_word.close()
+		with open(os.path.join(create_dir(path_name), 'finding_word_30_last_testing.txt'), 'wb') as f:
+			for key, value in list_word:
+				f.write(value)
+				f.write(':')
+				f.write(str(key))
+				f.write('\n')
+			f.close()
